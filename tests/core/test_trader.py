@@ -194,6 +194,79 @@ class TestSnapshot:
         assert "total_net_pnl" in snap
 
 
+class TestShortAccounting:
+    """Verify that short positions produce correct balance and equity."""
+
+    def test_short_round_trip_balance_is_correct(self):
+        """After short open+close with zero fees, balance = initial + pnl."""
+        trader = PaperTrader(balance=10_000, commission_rate=0, slippage_rate=0)
+        candle = {"symbol": "SYM", "close": 100.0, "time": "2026-01-01T00:00:00"}
+
+        trader.execute({"action": "SHORT"}, candle)
+        cover_candle = {**candle, "close": 90.0, "time": "2026-01-01T00:01:00"}
+        trader.execute({"action": "COVER"}, cover_candle)
+
+        expected_pnl = (100 - 90) * (10_000 / 100)
+        assert abs(trader.balance - (10_000 + expected_pnl)) < 0.01
+
+    def test_short_loss_balance_is_correct(self):
+        trader = PaperTrader(balance=10_000, commission_rate=0, slippage_rate=0)
+        candle = {"symbol": "SYM", "close": 100.0, "time": "2026-01-01T00:00:00"}
+
+        trader.execute({"action": "SHORT"}, candle)
+        cover_candle = {**candle, "close": 110.0, "time": "2026-01-01T00:01:00"}
+        trader.execute({"action": "COVER"}, cover_candle)
+
+        expected_pnl = (100 - 110) * (10_000 / 100)
+        assert abs(trader.balance - (10_000 + expected_pnl)) < 0.01
+
+    def test_total_equity_decreases_when_short_loses(self):
+        trader = PaperTrader(balance=10_000, commission_rate=0, slippage_rate=0)
+        candle = {"symbol": "SYM", "close": 100.0, "time": "2026-01-01T00:00:00"}
+        trader.execute({"action": "SHORT"}, candle)
+
+        equity_at_entry = trader.total_equity(100.0)
+        equity_when_losing = trader.total_equity(110.0)
+        assert equity_when_losing < equity_at_entry
+
+    def test_total_equity_increases_when_short_wins(self):
+        trader = PaperTrader(balance=10_000, commission_rate=0, slippage_rate=0)
+        candle = {"symbol": "SYM", "close": 100.0, "time": "2026-01-01T00:00:00"}
+        trader.execute({"action": "SHORT"}, candle)
+
+        equity_at_entry = trader.total_equity(100.0)
+        equity_when_winning = trader.total_equity(90.0)
+        assert equity_when_winning > equity_at_entry
+
+
+class TestDeterministicSlippage:
+    def test_same_seed_gives_same_results(self):
+        results = []
+        for _ in range(2):
+            trader = PaperTrader(
+                balance=10_000, commission_rate=0, slippage_rate=0.01,
+                random_seed=42,
+            )
+            candle = {"symbol": "SYM", "close": 100.0, "time": "2026-01-01T00:00:00"}
+            res = trader.execute({"action": "BUY"}, candle)
+            results.append(res["entry_price"])
+
+        assert results[0] == results[1]
+
+    def test_different_seeds_give_different_results(self):
+        prices = []
+        for seed in (42, 99):
+            trader = PaperTrader(
+                balance=10_000, commission_rate=0, slippage_rate=0.01,
+                random_seed=seed,
+            )
+            candle = {"symbol": "SYM", "close": 100.0, "time": "2026-01-01T00:00:00"}
+            res = trader.execute({"action": "BUY"}, candle)
+            prices.append(res["entry_price"])
+
+        assert prices[0] != prices[1]
+
+
 class TestTradeDataclass:
     def test_net_pnl_calculation(self):
         trade = Trade(

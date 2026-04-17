@@ -84,13 +84,15 @@ class TradingEngine:
             "meta": decision.get("meta", {}),
         })
 
+        equity = self.trader.total_equity(price)
         risk_context = {
             "balance": self.trader.balance,
-            "equity": self.trader.total_equity(price),
+            "equity": equity,
             "open_positions": len(self.trader.positions),
             "drawdown": self._current_drawdown(price),
             "daily_pnl": self.risk_manager.state.daily_pnl,
             "date": data.get("time", "")[:10] if data.get("time") else "",
+            "position_value": self.trader.balance if price > 0 else 0,
         }
         decision = self.risk_manager.validate(decision, risk_context)
 
@@ -100,6 +102,8 @@ class TradingEngine:
         if len(self.trader.trade_history) > prev_trade_count:
             last_trade = self.trader.trade_history[-1]
             self.risk_manager.record_trade_result(last_trade.pnl)
+
+        self.trader._record_equity(data.get("time", ""), price)
 
         self._history.append(data)
         result = {**decision, **exec_result, "data": data}
@@ -116,11 +120,15 @@ class TradingEngine:
 
     def compute_metrics(self, periods_per_year: int = 252) -> dict[str, Any]:
         """Calculate performance metrics for the completed run."""
+        first_price = self._history[0].get("close") if self._history else None
+        last_price = self._history[-1].get("close") if self._history else None
         return calculate_metrics(
             trades=self.trader.trade_history,
             equity_snapshots=self.trader.equity_snapshots,
             initial_balance=self.initial_balance,
             periods_per_year=periods_per_year,
+            first_price=first_price,
+            last_price=last_price,
         )
 
     def _build_context(self, current_price: float) -> TradingContext:

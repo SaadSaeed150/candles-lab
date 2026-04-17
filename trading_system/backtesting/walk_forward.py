@@ -201,6 +201,8 @@ class WalkForwardOptimizer:
             csv_path=self.config.base_config.csv_path,
             synthetic_points=self.config.base_config.synthetic_points,
             synthetic_start_price=self.config.base_config.synthetic_start_price,
+            random_seed=self.config.base_config.random_seed,
+            strategy_params=params,
         )
 
         runner = BacktestRunner(config)

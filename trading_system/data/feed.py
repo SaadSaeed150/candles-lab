@@ -21,6 +21,7 @@ def generate_feed(
     start_time: datetime | None = None,
     interval: timedelta = timedelta(minutes=1),
     volatility: float = 3.0,
+    seed: int | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Yield synthetic OHLCV candles with a random-walk price model.
 
@@ -31,18 +32,20 @@ def generate_feed(
         start_time:  Timestamp of the first candle (defaults to now).
         interval:    Time between candles.
         volatility:  Max absolute price change per candle.
+        seed:        Random seed for reproducible data. None uses global random.
     """
+    rng = random.Random(seed)
     current_time = start_time or datetime.utcnow()
     price = start_price
 
     for _ in range(num_points):
-        delta = random.uniform(-volatility, volatility)
+        delta = rng.uniform(-volatility, volatility)
         open_price = price
         close_price = max(0.01, price + delta)
-        high = max(open_price, close_price) + random.uniform(0, volatility * 0.5)
-        low = min(open_price, close_price) - random.uniform(0, volatility * 0.5)
+        high = max(open_price, close_price) + rng.uniform(0, volatility * 0.5)
+        low = min(open_price, close_price) - rng.uniform(0, volatility * 0.5)
         low = max(0.01, low)
-        volume = random.randint(100, 5000)
+        volume = rng.randint(100, 5000)
 
         yield {
             "symbol": symbol,

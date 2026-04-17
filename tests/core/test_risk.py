@@ -103,6 +103,55 @@ class TestHoldPassesThrough:
         assert result["action"] == "HOLD"
 
 
+class TestCooldown:
+    def test_cooldown_blocks_then_expires(self):
+        cfg = RiskConfig(cooldown_after_loss=3, max_drawdown_pct=0, max_daily_loss_pct=0,
+                         max_open_positions=0, min_confidence=0)
+        rm = RiskManager(cfg)
+
+        rm.record_trade_result(-100)
+
+        ctx = {"balance": 9000, "equity": 9000, "open_positions": 0, "drawdown": 0}
+        decision = {"action": "BUY", "confidence": 0.8}
+
+        r1 = rm.validate(decision, ctx)
+        assert r1["action"] == "HOLD"
+        assert "loss_cooldown" in r1["meta"]["risk_reason"]
+
+        rm.validate({"action": "HOLD"}, ctx)
+        rm.validate({"action": "HOLD"}, ctx)
+
+        r2 = rm.validate(decision, ctx)
+        assert r2["action"] == "BUY"
+
+
+class TestMaxPositionPct:
+    def test_rejects_when_position_too_large(self):
+        cfg = RiskConfig(max_position_pct=0.25, max_drawdown_pct=0,
+                         max_daily_loss_pct=0, max_open_positions=0, min_confidence=0)
+        rm = RiskManager(cfg)
+
+        decision = {"action": "BUY", "confidence": 0.8}
+        ctx = {"balance": 8000, "equity": 10000, "open_positions": 0,
+               "drawdown": 0, "position_value": 8000}
+
+        result = rm.validate(decision, ctx)
+        assert result["action"] == "HOLD"
+        assert "position_too_large" in result["meta"]["risk_reason"]
+
+    def test_allows_when_position_within_limit(self):
+        cfg = RiskConfig(max_position_pct=0.5, max_drawdown_pct=0,
+                         max_daily_loss_pct=0, max_open_positions=0, min_confidence=0)
+        rm = RiskManager(cfg)
+
+        decision = {"action": "BUY", "confidence": 0.8}
+        ctx = {"balance": 4000, "equity": 10000, "open_positions": 0,
+               "drawdown": 0, "position_value": 4000}
+
+        result = rm.validate(decision, ctx)
+        assert result["action"] == "BUY"
+
+
 class TestReset:
     def test_reset_clears_state(self, risk_config):
         rm = RiskManager(risk_config)

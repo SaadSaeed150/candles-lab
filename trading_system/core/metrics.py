@@ -8,6 +8,7 @@ making them usable after any backtest, paper, or live session.
 from __future__ import annotations
 
 import math
+from datetime import datetime
 from typing import Any
 
 import numpy as np
@@ -19,6 +20,8 @@ def calculate_metrics(
     initial_balance: float = 10_000.0,
     risk_free_rate: float = 0.0,
     periods_per_year: int = 252,
+    first_price: float | None = None,
+    last_price: float | None = None,
 ) -> dict[str, Any]:
     """Compute a full suite of performance metrics.
 
@@ -28,6 +31,8 @@ def calculate_metrics(
         initial_balance:  Starting capital.
         risk_free_rate:   Annual risk-free rate for Sharpe/Sortino.
         periods_per_year: Trading periods per year (252 for daily, 365*24*60 for 1m crypto).
+        first_price:      First candle close price (for benchmark comparison).
+        last_price:       Last candle close price (for benchmark comparison).
 
     Returns:
         Dict with all computed metrics.
@@ -82,6 +87,12 @@ def calculate_metrics(
         "max_consecutive_losses": _max_consecutive(net_pnls, positive=False),
 
         "cagr": _cagr(initial_balance, final_equity, len(equities), periods_per_year),
+
+        "recovery_factor": _recovery_factor(total_net_pnl, equities, initial_balance),
+        "tail_ratio": _tail_ratio(net_pnls),
+        "avg_holding_period": _avg_holding_period(trades),
+
+        **_benchmark_metrics(first_price, last_price, initial_balance, final_equity),
     }
 
 
@@ -96,7 +107,90 @@ def _empty_metrics() -> dict[str, Any]:
         "sharpe_ratio": 0, "sortino_ratio": 0, "calmar_ratio": 0,
         "max_drawdown_pct": 0, "max_consecutive_wins": 0,
         "max_consecutive_losses": 0, "cagr": 0,
+        "recovery_factor": 0, "tail_ratio": 0, "avg_holding_period": None,
+        "benchmark_return_pct": 0, "alpha": 0,
     }
+
+
+def _benchmark_metrics(
+    first_price: float | None,
+    last_price: float | None,
+    initial_balance: float,
+    final_equity: float,
+) -> dict[str, Any]:
+    """Compute buy-and-hold benchmark return and alpha vs the strategy."""
+    if not first_price or not last_price or first_price <= 0:
+        return {"benchmark_return_pct": 0, "alpha": 0}
+    benchmark = (last_price / first_price - 1) * 100
+    strategy = (final_equity / initial_balance - 1) * 100 if initial_balance > 0 else 0
+    return {
+        "benchmark_return_pct": round(benchmark, 4),
+        "alpha": round(strategy - benchmark, 4),
+    }
+
+
+def _recovery_factor(
+    total_net_pnl: float,
+    equities: list[float],
+    initial_balance: float,
+) -> float:
+    """Net profit / max drawdown in dollars. Higher = faster recovery."""
+    if len(equities) < 2:
+        return 0
+    arr = np.array(equities)
+    peaks = np.maximum.accumulate(arr)
+    max_dd_dollars = float(np.max(peaks - arr))
+    if max_dd_dollars <= 0:
+        return float("inf") if total_net_pnl > 0 else 0
+    return round(total_net_pnl / max_dd_dollars, 4)
+
+
+def _tail_ratio(net_pnls: list[float]) -> float:
+    """95th percentile of wins / abs(5th percentile of losses).
+
+    Values > 1 indicate the right tail (big wins) outweighs the left
+    tail (big losses).
+    """
+    if len(net_pnls) < 2:
+        return 0
+    arr = np.array(net_pnls)
+    p95 = float(np.percentile(arr, 95))
+    p5 = float(np.percentile(arr, 5))
+    if p5 >= 0:
+        return float("inf") if p95 > 0 else 0
+    return round(p95 / abs(p5), 4)
+
+
+def _avg_holding_period(trades: list) -> str | None:
+    """Mean duration between open and close across trades."""
+    durations: list[float] = []
+    for t in trades:
+        try:
+            opened = _parse_iso(t.opened_at) if isinstance(t.opened_at, str) else t.opened_at
+            closed = _parse_iso(t.closed_at) if isinstance(t.closed_at, str) else t.closed_at
+            if opened and closed:
+                durations.append((closed - opened).total_seconds())
+        except (ValueError, TypeError, AttributeError):
+            continue
+    if not durations:
+        return None
+    avg_secs = sum(durations) / len(durations)
+    if avg_secs < 60:
+        return f"{avg_secs:.0f}s"
+    if avg_secs < 3600:
+        return f"{avg_secs / 60:.1f}m"
+    if avg_secs < 86400:
+        return f"{avg_secs / 3600:.1f}h"
+    return f"{avg_secs / 86400:.1f}d"
+
+
+def _parse_iso(s: str) -> datetime | None:
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s)
+    except ValueError:
+        return None
 
 
 def _profit_factor(wins: list[float], losses: list[float]) -> float:
@@ -206,9 +300,9 @@ def _cagr(
     periods_per_year: int,
 ) -> float:
     """Compound Annual Growth Rate."""
-    if initial <= 0 or final <= 0 or num_periods <= 0:
+    if initial <= 0 or final <= 0 or num_periods <= 1:
         return 0
-    years = num_periods / periods_per_year
-    if years == 0:
+    years = (num_periods - 1) / periods_per_year
+    if years <= 0:
         return 0
     return round((final / initial) ** (1 / years) - 1, 6)

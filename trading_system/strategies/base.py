@@ -21,6 +21,12 @@ class BaseStrategy(ABC):
     and must return a standardised decision dict.
     """
 
+    def configure(self, params: dict[str, Any]) -> None:
+        """Apply parameter overrides. Subclasses can override for validation."""
+        for key, value in params.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
     @abstractmethod
     def on_data(self, data: dict[str, Any], context: TradingContext) -> dict[str, Any]:
         """Evaluate a single data point and return a trading decision.

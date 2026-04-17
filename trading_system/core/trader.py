@@ -82,6 +82,7 @@ class PaperTrader:
         position_sizing:    How to size positions (all_in, fixed_amount, percent).
         position_size_value: Value used by the sizing method (amount or percent 0-1).
         max_positions:      Maximum concurrent open positions.
+        random_seed:        Seed for deterministic slippage. None uses global random.
     """
 
     balance: float = 10_000.0
@@ -90,14 +91,17 @@ class PaperTrader:
     position_sizing: PositionSizing = PositionSizing.ALL_IN
     position_size_value: float = 0.0
     max_positions: int = 1
+    random_seed: int | None = None
 
     positions: dict[str, OpenPosition] = field(default_factory=dict)
     trade_history: list[Trade] = field(default_factory=list)
     _peak_equity: float = field(default=0.0, init=False)
     _equity_snapshots: list[dict] = field(default_factory=list, init=False)
+    _rng: random.Random = field(default=None, init=False)
 
     def __post_init__(self):
         self._peak_equity = self.balance
+        self._rng = random.Random(self.random_seed)
 
     # -- Public interface -----------------------------------------------------
 
@@ -133,7 +137,6 @@ class PaperTrader:
                 return self._close_position(symbol, price, timestamp)
             return {"executed": "SKIP", "reason": "no_short_position", "balance": self.balance}
 
-        self._record_equity(timestamp, price)
         return {"executed": "HOLD", "balance": self.balance}
 
     # -- Position sizing ------------------------------------------------------
@@ -157,7 +160,7 @@ class PaperTrader:
         """Simulate slippage — price moves against you."""
         if self.slippage_rate <= 0:
             return price
-        slip = price * random.uniform(0, self.slippage_rate)
+        slip = price * self._rng.uniform(0, self.slippage_rate)
         if side == "LONG":
             return price + slip
         return price - slip
@@ -214,7 +217,6 @@ class PaperTrader:
             "OPENED %s %s %.4f units @ %.2f (fill=%.2f, comm=%.4f)",
             side, symbol, quantity, price, fill_price, commission,
         )
-        self._record_equity(timestamp, price)
         return {
             "executed": action_for_side(side),
             "side": side,
@@ -240,7 +242,7 @@ class PaperTrader:
             proceeds = fill_price * pos.quantity
         else:
             pnl = (pos.entry_price - fill_price) * pos.quantity
-            proceeds = pos.entry_price * pos.quantity + pnl
+            proceeds = pnl
 
         self.balance += proceeds - commission
 
@@ -268,7 +270,6 @@ class PaperTrader:
         )
 
         del self.positions[symbol]
-        self._record_equity(timestamp, price)
         return {
             "executed": "SELL" if pos.side == "LONG" else "COVER",
             "side": pos.side,
@@ -323,9 +324,13 @@ class PaperTrader:
         return sum(pos.unrealised_pnl(current_price) for pos in self.positions.values())
 
     def total_equity(self, current_price: float) -> float:
-        return self.balance + sum(
-            pos.market_value(current_price) for pos in self.positions.values()
-        )
+        equity = self.balance
+        for pos in self.positions.values():
+            if pos.side == "LONG":
+                equity += pos.market_value(current_price)
+            else:
+                equity += pos.unrealised_pnl(current_price)
+        return equity
 
     # -- Backward-compatible properties ---------------------------------------
 

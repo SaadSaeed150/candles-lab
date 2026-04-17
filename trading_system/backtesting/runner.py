@@ -51,6 +51,8 @@ class BacktestConfig:
     csv_path: str | None = None
     synthetic_points: int = 100
     synthetic_start_price: float = 100.0
+    random_seed: int | None = None
+    strategy_params: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -108,6 +110,8 @@ class BacktestRunner:
 
         strategy_cls = registry.get(self.config.strategy_name)
         strategy = strategy_cls()
+        if self.config.strategy_params:
+            strategy.configure(self.config.strategy_params)
 
         trader = PaperTrader(
             balance=self.config.initial_balance,
@@ -116,6 +120,7 @@ class BacktestRunner:
             position_sizing=self.config.position_sizing,
             position_size_value=self.config.position_size_value,
             max_positions=self.config.max_positions,
+            random_seed=self.config.random_seed,
         )
 
         engine = TradingEngine(
@@ -218,4 +223,5 @@ class BacktestRunner:
             symbol=self.config.symbol,
             start_price=self.config.synthetic_start_price,
             num_points=self.config.synthetic_points,
+            seed=self.config.random_seed,
         )

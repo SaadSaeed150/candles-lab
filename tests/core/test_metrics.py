@@ -90,3 +90,75 @@ class TestConsecutive:
     def test_max_consecutive_losses(self, sample_trades):
         metrics = calculate_metrics(sample_trades, [], initial_balance=10_000)
         assert metrics["max_consecutive_losses"] >= 1
+
+
+class TestBenchmark:
+    def test_benchmark_return_computed(self, sample_trades):
+        metrics = calculate_metrics(
+            sample_trades, [], initial_balance=10_000,
+            first_price=100.0, last_price=120.0,
+        )
+        assert metrics["benchmark_return_pct"] == pytest.approx(20.0, abs=0.01)
+
+    def test_alpha_positive_when_strategy_beats_benchmark(self, sample_trades):
+        snapshots = [{"total_equity": 10_000 + i * 200} for i in range(50)]
+        metrics = calculate_metrics(
+            sample_trades, snapshots, initial_balance=10_000,
+            first_price=100.0, last_price=105.0,
+        )
+        assert metrics["alpha"] > 0
+
+    def test_no_prices_gives_zero_benchmark(self, sample_trades):
+        metrics = calculate_metrics(sample_trades, [], initial_balance=10_000)
+        assert metrics["benchmark_return_pct"] == 0
+        assert metrics["alpha"] == 0
+
+
+class TestRecoveryFactor:
+    def test_positive_recovery_factor(self, sample_trades):
+        snapshots = [
+            {"total_equity": 10000},
+            {"total_equity": 10500},
+            {"total_equity": 9500},
+            {"total_equity": 10200},
+        ]
+        metrics = calculate_metrics(sample_trades, snapshots, initial_balance=10_000)
+        assert metrics["recovery_factor"] != 0
+
+
+class TestTailRatio:
+    def test_tail_ratio_computed(self, sample_trades):
+        metrics = calculate_metrics(sample_trades, [], initial_balance=10_000)
+        assert "tail_ratio" in metrics
+
+    def test_tail_ratio_positive_for_good_strategy(self):
+        from trading_system.core.trader import Trade
+        trades = [
+            Trade("BTC", "LONG", 100, 120, 10, 200, 0, 0, "", ""),
+            Trade("BTC", "LONG", 100, 105, 10, 50, 0, 0, "", ""),
+            Trade("BTC", "LONG", 100, 98, 10, -20, 0, 0, "", ""),
+        ]
+        metrics = calculate_metrics(trades, [], initial_balance=10_000)
+        assert metrics["tail_ratio"] > 0
+
+
+class TestCAGR:
+    def test_cagr_fence_post(self, sample_trades):
+        snapshots = [{"total_equity": 10000 + i * 10} for i in range(253)]
+        metrics = calculate_metrics(
+            sample_trades, snapshots, initial_balance=10_000,
+            periods_per_year=252,
+        )
+        assert metrics["cagr"] > 0
+
+    def test_single_snapshot_gives_zero_cagr(self, sample_trades):
+        snapshots = [{"total_equity": 11000}]
+        metrics = calculate_metrics(sample_trades, snapshots, initial_balance=10_000)
+        assert metrics["cagr"] == 0
+
+
+class TestAvgHoldingPeriod:
+    def test_holding_period_string_returned(self, sample_trades):
+        metrics = calculate_metrics(sample_trades, [], initial_balance=10_000)
+        assert metrics["avg_holding_period"] is not None
+        assert isinstance(metrics["avg_holding_period"], str)

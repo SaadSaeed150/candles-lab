@@ -76,6 +76,8 @@ class RiskManager:
             Modified decision dict. action may be changed to HOLD
             with a meta.risk_reason explaining why.
         """
+        self.state.ticks_since_last_loss += 1
+
         if self.state.is_killed:
             return self._reject(decision, f"risk_kill_switch: {self.state.kill_reason}")
 
@@ -97,7 +99,10 @@ class RiskManager:
             self.state.peak_equity = equity
 
         if action in ("BUY", "SHORT"):
-            reason = self._check_entry_rules(decision, equity, balance, drawdown, open_positions)
+            position_value = context.get("position_value", 0)
+            reason = self._check_entry_rules(
+                decision, equity, balance, drawdown, open_positions, position_value,
+            )
             if reason:
                 return self._reject(decision, reason)
 
@@ -120,9 +125,15 @@ class RiskManager:
         balance: float,
         drawdown: float,
         open_positions: int,
+        position_value: float = 0,
     ) -> str | None:
         """Check all entry rules. Returns rejection reason or None."""
         cfg = self.config
+
+        if cfg.max_position_pct and equity > 0 and position_value > 0:
+            pct = position_value / equity
+            if pct > cfg.max_position_pct:
+                return f"position_too_large ({pct:.1%} > {cfg.max_position_pct:.1%})"
 
         if cfg.max_drawdown_pct and drawdown >= cfg.max_drawdown_pct:
             self.state.is_killed = True
