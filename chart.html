@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Candles Lab - Market Data</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root, [data-theme="dark"] {
+  --bg-primary: #0a0e17;
+  --bg-secondary: #111827;
+  --bg-card: #151c2c;
+  --bg-hover: #1e293b;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent-green: #22c55e;
+  --accent-red: #ef4444;
+  --accent-blue: #3b82f6;
+  --border: #1e293b;
+  --chart-bg: #0a0e17;
+  --chart-text: #64748b;
+  --chart-grid: #1e293b;
+  --ohlcv-bg: rgba(10,14,23,0.85);
+}
+[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-card: #f1f5f9;
+  --bg-hover: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent-green: #16a34a;
+  --accent-red: #dc2626;
+  --accent-blue: #2563eb;
+  --border: #e2e8f0;
+  --chart-bg: #ffffff;
+  --chart-text: #94a3b8;
+  --chart-grid: #f1f5f9;
+  --ohlcv-bg: rgba(255,255,255,0.92);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow-x: hidden;
+}
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+.logo {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px; font-weight: 700;
+  color: var(--accent-blue);
+}
+.logo span { color: var(--text-muted); font-weight: 400; }
+.status-bar {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent-green);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+.symbol-bar {
+  display: flex; gap: 4px; padding: 10px 24px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.symbol-btn {
+  padding: 6px 14px; border-radius: 6px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.symbol-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.symbol-btn.active {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue); color: white;
+}
+
+.main-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  height: calc(100vh - 106px);
+}
+.chart-area {
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--border);
+}
+.chart-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.price-display { display: flex; align-items: baseline; gap: 12px; }
+.current-price {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 28px; font-weight: 700;
+}
+.price-change {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px; font-weight: 600;
+  padding: 2px 8px; border-radius: 4px;
+}
+.price-change.up { color: var(--accent-green); background: rgba(34,197,94,0.1); }
+.price-change.down { color: var(--accent-red); background: rgba(239,68,68,0.1); }
+
+.chart-info {
+  font-size: 12px; color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+.chart-container { flex: 1; position: relative; }
+#chart { width: 100%; height: 100%; }
+
+.ohlcv-bar {
+  position: absolute;
+  top: 8px; left: 12px;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  pointer-events: none;
+  background: var(--ohlcv-bg);
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.ohlcv-bar .ohlcv-label { color: var(--text-muted); }
+.ohlcv-bar .ohlcv-val { font-weight: 600; margin-left: 3px; }
+.ohlcv-bar .ohlcv-val.up { color: var(--accent-green); }
+.ohlcv-bar .ohlcv-val.down { color: var(--accent-red); }
+.ohlcv-bar .ohlcv-val.neutral { color: var(--text-primary); }
+.ohlcv-bar .ohlcv-sep {
+  width: 1px; height: 14px; background: var(--border);
+  align-self: center;
+}
+.ohlcv-bar .ohlcv-group {
+  display: flex; align-items: center; gap: 3px;
+}
+
+.sidebar {
+  display: flex; flex-direction: column;
+  background: var(--bg-secondary); overflow-y: auto;
+}
+.sidebar-title {
+  padding: 14px 16px; font-size: 12px; font-weight: 700;
+  color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 1px; border-bottom: 1px solid var(--border);
+}
+.coin-row {
+  display: grid; grid-template-columns: 1fr auto auto;
+  align-items: center; padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background 0.15s;
+}
+.coin-row:hover { background: var(--bg-hover); }
+.coin-row.active {
+  background: rgba(59,130,246,0.08);
+  border-left: 3px solid var(--accent-blue);
+  padding-left: 13px;
+}
+.coin-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; font-weight: 600;
+}
+.coin-name small {
+  display: block; font-weight: 400;
+  font-size: 11px; color: var(--text-muted); margin-top: 1px;
+}
+.coin-price {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; font-weight: 600;
+  text-align: right; padding-right: 12px;
+}
+.coin-change {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 600;
+  padding: 3px 8px; border-radius: 4px;
+  text-align: right; min-width: 70px;
+}
+.coin-change.up { color: var(--accent-green); background: rgba(34,197,94,0.1); }
+.coin-change.down { color: var(--accent-red); background: rgba(239,68,68,0.1); }
+
+.data-panel { border-top: 1px solid var(--border); }
+.data-row {
+  display: flex; justify-content: space-between;
+  padding: 6px 16px; font-size: 12px;
+}
+.data-row .label { color: var(--text-muted); }
+.data-row .value { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+.data-row .value.up { color: var(--accent-green); }
+.data-row .value.down { color: var(--accent-red); }
+
+.theme-toggle {
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--text-secondary); cursor: pointer;
+  transition: all 0.2s; font-size: 16px;
+}
+.theme-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
+.theme-toggle svg { width: 18px; height: 18px; fill: currentColor; }
+
+.tab-btn {
+  padding: 8px 18px; border: none;
+  background: transparent; color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s;
+  border-bottom: 2px solid transparent;
+  letter-spacing: 0.5px;
+}
+.tab-btn:hover { color: var(--text-primary); }
+.tab-btn.active {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+}
+
+@media (max-width: 900px) {
+  .main-layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">CANDLES<span>.LAB</span></div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <div class="status-bar">
+      <div class="status-dot"></div>
+      <span id="data-status">Loading...</span>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">
+      <svg id="icon-sun" viewBox="0 0 24 24" style="display:none"><path d="M12 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm0 15a5 5 0 100-10 5 5 0 000 10zm0-2a3 3 0 110-6 3 3 0 010 6zm8-3a1 1 0 110 2h-1a1 1 0 110-2h1zM4 11a1 1 0 110 2H3a1 1 0 110-2h1zm15.07-6.36a1 1 0 010 1.41l-.71.71a1 1 0 11-1.41-1.41l.7-.71a1 1 0 011.42 0zM6.34 17.66a1 1 0 010 1.41l-.7.71a1 1 0 11-1.42-1.42l.71-.7a1 1 0 011.41 0zm12.02 2.12a1 1 0 01-1.41 0l-.71-.71a1 1 0 111.41-1.41l.71.7a1 1 0 010 1.42zM6.34 6.34a1 1 0 01-1.41 0l-.71-.7a1 1 0 011.41-1.42l.71.71a1 1 0 010 1.41zM12 19a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1z"/></svg>
+      <svg id="icon-moon" viewBox="0 0 24 24"><path d="M12.1 22c-5.5 0-10-4.5-10-10 0-4.8 3.4-8.8 8.1-9.8.5-.1 1 .1 1.3.5.3.4.2.9-.1 1.3-1.2 1.5-1.8 3.3-1.8 5.2 0 4.6 3.8 8.4 8.4 8.4.9 0 1.7-.1 2.5-.4.5-.2 1 0 1.3.4.3.4.2 1-.2 1.3-2.2 1.9-5 3.1-8 3.1h-1.5z"/></svg>
+    </button>
+  </div>
+</div>
+
+<div style="display:flex;align-items:center;padding:0 24px;background:var(--bg-secondary);border-bottom:1px solid var(--border);gap:0;">
+  <button class="tab-btn active" id="tab-crypto" onclick="switchTab('crypto')">CRYPTO</button>
+  <button class="tab-btn" id="tab-forex" onclick="switchTab('forex')">FOREX</button>
+  <button class="tab-btn" id="tab-stocks" onclick="switchTab('stocks')">STOCKS</button>
+  <div class="symbol-bar" id="symbol-bar" style="border-bottom:none;padding-left:12px;"></div>
+</div>
+
+<div class="main-layout">
+  <div class="chart-area">
+    <div class="chart-header">
+      <div class="price-display">
+        <div class="current-price" id="current-price">--</div>
+        <div class="price-change" id="price-change">--</div>
+      </div>
+      <div class="chart-info">
+        <span id="chart-symbol">BTCUSDT &middot; 1m &middot; Binance</span>
+      </div>
+    </div>
+    <div class="chart-container">
+      <div class="ohlcv-bar" id="ohlcv-bar"></div>
+      <div id="chart"></div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sidebar-title">Market Overview</div>
+    <div id="coin-list"></div>
+    <div id="data-panel">
+      <div class="sidebar-title">Latest Candle</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = 'http://localhost:8001/api';
+
+const CRYPTO_SYMBOLS = [
+  { sym: 'BTCUSDT',  name: 'Bitcoin',   short: 'BTC',  exchange: 'binance', type: 'crypto' },
+  { sym: 'ETHUSDT',  name: 'Ethereum',  short: 'ETH',  exchange: 'binance', type: 'crypto' },
+  { sym: 'BNBUSDT',  name: 'BNB',       short: 'BNB',  exchange: 'binance', type: 'crypto' },
+  { sym: 'SOLUSDT',  name: 'Solana',    short: 'SOL',  exchange: 'binance', type: 'crypto' },
+  { sym: 'XRPUSDT',  name: 'XRP',       short: 'XRP',  exchange: 'binance', type: 'crypto' },
+  { sym: 'ADAUSDT',  name: 'Cardano',   short: 'ADA',  exchange: 'binance', type: 'crypto' },
+  { sym: 'DOGEUSDT', name: 'Dogecoin',  short: 'DOGE', exchange: 'binance', type: 'crypto' },
+  { sym: 'AVAXUSDT', name: 'Avalanche', short: 'AVAX', exchange: 'binance', type: 'crypto' },
+  { sym: 'LINKUSDT', name: 'Chainlink', short: 'LINK', exchange: 'binance', type: 'crypto' },
+  { sym: 'DOTUSDT',  name: 'Polkadot',  short: 'DOT',  exchange: 'binance', type: 'crypto' },
+];
+
+const FOREX_SYMBOLS = [
+  { sym: 'EUR/USD', name: 'Euro / Dollar',    short: 'EUR/USD', exchange: 'twelvedata', type: 'forex' },
+  { sym: 'USD/JPY', name: 'Dollar / Yen',     short: 'USD/JPY', exchange: 'twelvedata', type: 'forex' },
+  { sym: 'GBP/USD', name: 'Pound / Dollar',   short: 'GBP/USD', exchange: 'twelvedata', type: 'forex' },
+  { sym: 'AUD/USD', name: 'Aussie / Dollar',  short: 'AUD/USD', exchange: 'twelvedata', type: 'forex' },
+  { sym: 'USD/CAD', name: 'Dollar / Loonie',  short: 'USD/CAD', exchange: 'twelvedata', type: 'forex' },
+  { sym: 'USD/CHF', name: 'Dollar / Franc',   short: 'USD/CHF', exchange: 'twelvedata', type: 'forex' },
+  { sym: 'NZD/USD', name: 'Kiwi / Dollar',    short: 'NZD/USD', exchange: 'twelvedata', type: 'forex' },
+  { sym: 'EUR/GBP', name: 'Euro / Pound',     short: 'EUR/GBP', exchange: 'twelvedata', type: 'forex' },
+  { sym: 'EUR/JPY', name: 'Euro / Yen',       short: 'EUR/JPY', exchange: 'twelvedata', type: 'forex' },
+  { sym: 'GBP/JPY', name: 'Pound / Yen',      short: 'GBP/JPY', exchange: 'twelvedata', type: 'forex' },
+];
+
+const STOCK_SYMBOLS = [
+  { sym: 'AAPL',  name: 'Apple',        short: 'AAPL',  exchange: 'polygon', type: 'stock' },
+  { sym: 'MSFT',  name: 'Microsoft',    short: 'MSFT',  exchange: 'polygon', type: 'stock' },
+  { sym: 'NVDA',  name: 'NVIDIA',       short: 'NVDA',  exchange: 'polygon', type: 'stock' },
+  { sym: 'GOOGL', name: 'Alphabet',     short: 'GOOGL', exchange: 'polygon', type: 'stock' },
+  { sym: 'AMZN',  name: 'Amazon',       short: 'AMZN',  exchange: 'polygon', type: 'stock' },
+  { sym: 'META',  name: 'Meta',         short: 'META',  exchange: 'polygon', type: 'stock' },
+  { sym: 'TSLA',  name: 'Tesla',        short: 'TSLA',  exchange: 'polygon', type: 'stock' },
+  { sym: 'JPM',   name: 'JPMorgan',     short: 'JPM',   exchange: 'polygon', type: 'stock' },
+  { sym: 'V',     name: 'Visa',         short: 'V',     exchange: 'polygon', type: 'stock' },
+  { sym: 'AVGO',  name: 'Broadcom',     short: 'AVGO',  exchange: 'polygon', type: 'stock' },
+];
+
+let activeTab = 'crypto';
+let SYMBOLS = CRYPTO_SYMBOLS;
+
+let chart, candleSeries, volumeSeries;
+let currentSymbol = 'BTCUSDT';
+let allData = {};
+let tickerData = {};
+let candleLookup = {};
+let currentTheme = localStorage.getItem('candles-theme') || 'dark';
+
+const THEMES = {
+  dark: {
+    bg: '#0a0e17', text: '#64748b', grid: '#1e293b', border: '#1e293b',
+    accent: '#3b82f6',
+    upColor: '#22c55e', downColor: '#ef4444',
+    volUp: 'rgba(34,197,94,0.3)', volDown: 'rgba(239,68,68,0.3)',
+  },
+  light: {
+    bg: '#ffffff', text: '#94a3b8', grid: '#f1f5f9', border: '#e2e8f0',
+    accent: '#2563eb',
+    upColor: '#16a34a', downColor: '#dc2626',
+    volUp: 'rgba(22,163,74,0.25)', volDown: 'rgba(220,38,38,0.25)',
+  },
+};
+
+function applyTheme(theme) {
+  currentTheme = theme;
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('candles-theme', theme);
+
+  document.getElementById('icon-sun').style.display = theme === 'dark' ? 'none' : 'block';
+  document.getElementById('icon-moon').style.display = theme === 'dark' ? 'block' : 'none';
+
+  if (chart) {
+    const t = THEMES[theme];
+    chart.applyOptions({
+      layout: { background: { type: 'solid', color: t.bg }, textColor: t.text },
+      grid: { vertLines: { color: t.grid }, horzLines: { color: t.grid } },
+      crosshair: {
+        vertLine: { color: t.accent }, horzLine: { color: t.accent },
+      },
+      rightPriceScale: { borderColor: t.border },
+      timeScale: { borderColor: t.border },
+    });
+    candleSeries.applyOptions({
+      upColor: t.upColor, downColor: t.downColor,
+      borderUpColor: t.upColor, borderDownColor: t.downColor,
+      wickUpColor: t.upColor, wickDownColor: t.downColor,
+    });
+    if (allData[currentSymbol]) updateChart(currentSymbol);
+  }
+}
+
+function toggleTheme() {
+  applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+}
+
+function getThemeColors() { return THEMES[currentTheme]; }
+
+function initChart() {
+  const container = document.getElementById('chart');
+  const t = getThemeColors();
+  chart = LightweightCharts.createChart(container, {
+    layout: {
+      background: { type: 'solid', color: t.bg },
+      textColor: t.text,
+      fontFamily: 'JetBrains Mono, monospace',
+      fontSize: 11,
+    },
+    grid: {
+      vertLines: { color: t.grid },
+      horzLines: { color: t.grid },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine: { color: t.accent, width: 1, style: 2 },
+      horzLine: { color: t.accent, width: 1, style: 2 },
+    },
+    rightPriceScale: {
+      borderColor: t.border,
+      scaleMargins: { top: 0.1, bottom: 0.25 },
+    },
+    timeScale: {
+      borderColor: t.border,
+      timeVisible: true,
+      secondsVisible: false,
+    },
+  });
+
+  candleSeries = chart.addCandlestickSeries({
+    upColor: t.upColor,
+    downColor: t.downColor,
+    borderDownColor: t.downColor,
+    borderUpColor: t.upColor,
+    wickDownColor: t.downColor,
+    wickUpColor: t.upColor,
+  });
+
+  volumeSeries = chart.addHistogramSeries({
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'volume',
+  });
+
+  chart.priceScale('volume').applyOptions({
+    scaleMargins: { top: 0.8, bottom: 0 },
+  });
+
+  new ResizeObserver(entries => {
+    const { width, height } = entries[0].contentRect;
+    chart.applyOptions({ width, height });
+  }).observe(container);
+
+  chart.subscribeCrosshairMove(param => {
+    if (!param.time) {
+      showOhlcvBar(null);
+      return;
+    }
+    const d = param.seriesData?.get(candleSeries);
+    if (d) {
+      const raw = candleLookup[d.time];
+      showOhlcvBar(d, raw);
+      updateDataPanel(raw || fakeRaw(d));
+    }
+  });
+}
+
+function getSymbolMeta(sym) {
+  return [...CRYPTO_SYMBOLS, ...FOREX_SYMBOLS, ...STOCK_SYMBOLS].find(s => s.sym === sym);
+}
+
+async function fetchCandles(symbol) {
+  try {
+    const meta = getSymbolMeta(symbol);
+    const exchange = meta ? meta.exchange : 'binance';
+    const tf = meta?.type === 'forex' ? '5m' : '1m';  // stocks + crypto use 1m
+    const res = await fetch(`${API_BASE}/market-data/?symbol=${symbol}&timeframe=${tf}&exchange=${exchange}`);
+    return (await res.json()).sort((a, b) => new Date(a.time) - new Date(b.time));
+  } catch (e) {
+    console.error('Fetch error:', e);
+    return [];
+  }
+}
+
+async function fetchTickers() {
+  try {
+    const res = await fetch(`${API_BASE}/tickers/`);
+    (await res.json()).forEach(t => { tickerData[t.symbol] = t; });
+  } catch (e) { console.error('Ticker fetch error:', e); }
+}
+
+function fmtPrice(price) {
+  const p = parseFloat(price);
+  if (isNaN(p)) return '--';
+  const meta = getSymbolMeta(currentSymbol);
+  if (meta?.type === 'forex') {
+    return p >= 100 ? p.toFixed(3) : p.toFixed(5);
+  }
+  if (meta?.type === 'stock') {
+    return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  if (p >= 1000) return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (p >= 1) return p.toFixed(4);
+  return p.toFixed(6);
+}
+
+function processCandles(rawData) {
+  const candles = [], volumes = [];
+  const seen = new Set();
+  rawData.forEach(d => {
+    const t = Math.floor(new Date(d.time).getTime() / 1000);
+    if (seen.has(t)) return;
+    seen.add(t);
+    const o = parseFloat(d.open), h = parseFloat(d.high);
+    const l = parseFloat(d.low), c = parseFloat(d.close);
+    candles.push({ time: t, open: o, high: h, low: l, close: c });
+    const tc = getThemeColors();
+    volumes.push({
+      time: t, value: parseFloat(d.volume),
+      color: c >= o ? tc.volUp : tc.volDown,
+    });
+  });
+  return { candles, volumes };
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  SYMBOLS = tab === 'crypto' ? CRYPTO_SYMBOLS : tab === 'forex' ? FOREX_SYMBOLS : STOCK_SYMBOLS;
+  document.getElementById('tab-crypto').classList.toggle('active', tab === 'crypto');
+  document.getElementById('tab-forex').classList.toggle('active', tab === 'forex');
+  document.getElementById('tab-stocks').classList.toggle('active', tab === 'stocks');
+  currentSymbol = SYMBOLS[0].sym;
+  renderSymbolBar();
+  updateChart(currentSymbol);
+}
+
+function updateChart(symbol) {
+  currentSymbol = symbol;
+  const meta = getSymbolMeta(symbol);
+  const exLabels = { binance: 'Binance', twelvedata: 'Twelve Data', polygon: 'Polygon.io', finnhub: 'Finnhub' };
+  const exLabel = exLabels[meta?.exchange] || meta?.exchange || 'Unknown';
+  const tfLabel = meta?.type === 'forex' ? '5m' : '1m';
+  document.getElementById('chart-symbol').textContent = `${symbol} \u00b7 ${tfLabel} \u00b7 ${exLabel}`;
+
+  const raw = allData[symbol] || [];
+  if (!raw.length) { candleSeries.setData([]); volumeSeries.setData([]); return; }
+
+  buildCandleLookup(raw);
+
+  const { candles, volumes } = processCandles(raw);
+  candleSeries.setData(candles);
+  volumeSeries.setData(volumes);
+  chart.timeScale().fitContent();
+
+  const last = raw[raw.length - 1];
+  const lc = parseFloat(last.close);
+
+  document.getElementById('current-price').textContent = fmtPrice(lc);
+
+  showOhlcvBar({
+    open: parseFloat(last.open), high: parseFloat(last.high),
+    low: parseFloat(last.low), close: lc,
+  }, last);
+
+  updateDataPanel(last);
+  updateSymbolButtons();
+  updateCoinList();
+}
+
+function fakeRaw(d) {
+  return { open: d.open, high: d.high, low: d.low, close: d.close, volume: 0, extra: {} };
+}
+
+function buildCandleLookup(rawData) {
+  candleLookup = {};
+  rawData.forEach(d => {
+    const t = Math.floor(new Date(d.time).getTime() / 1000);
+    candleLookup[t] = d;
+  });
+}
+
+function showOhlcvBar(d, raw) {
+  const bar = document.getElementById('ohlcv-bar');
+  if (!d) {
+    const data = allData[currentSymbol] || [];
+    if (data.length) {
+      const last = data[data.length - 1];
+      showOhlcvBar({
+        open: parseFloat(last.open), high: parseFloat(last.high),
+        low: parseFloat(last.low), close: parseFloat(last.close),
+      }, last);
+    }
+    return;
+  }
+
+  const ex = raw?.extra || {};
+  const up = d.close >= d.open;
+  const cls = up ? 'up' : 'down';
+  const chg = d.close - d.open;
+  const chgPct = d.open ? (chg / d.open * 100) : 0;
+  const vol = raw ? parseFloat(raw.volume) : 0;
+  const bp = ex.buy_pressure;
+  const bpCls = bp > 0.5 ? 'up' : bp < 0.5 ? 'down' : 'neutral';
+  const numTrades = ex.num_trades || ex.trades || 0;
+
+  let html = `
+    <div class="ohlcv-group"><span class="ohlcv-label">O</span><span class="ohlcv-val ${cls}">${fmtPrice(d.open)}</span></div>
+    <div class="ohlcv-group"><span class="ohlcv-label">H</span><span class="ohlcv-val ${cls}">${fmtPrice(d.high)}</span></div>
+    <div class="ohlcv-group"><span class="ohlcv-label">L</span><span class="ohlcv-val ${cls}">${fmtPrice(d.low)}</span></div>
+    <div class="ohlcv-group"><span class="ohlcv-label">C</span><span class="ohlcv-val ${cls}">${fmtPrice(d.close)}</span></div>
+    <div class="ohlcv-group"><span class="ohlcv-label">Chg</span><span class="ohlcv-val ${cls}">${chg >= 0 ? '+' : ''}${fmtPrice(chg)} (${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)</span></div>
+    <div class="ohlcv-sep"></div>
+    <div class="ohlcv-group"><span class="ohlcv-label">Vol</span><span class="ohlcv-val neutral">${vol.toFixed(2)}</span></div>`;
+
+  if (numTrades) {
+    html += `<div class="ohlcv-group"><span class="ohlcv-label">Trades</span><span class="ohlcv-val neutral">${numTrades.toLocaleString()}</span></div>`;
+  }
+
+  if (bp != null) {
+    html += `<div class="ohlcv-sep"></div>
+      <div class="ohlcv-group"><span class="ohlcv-label">Buy%</span><span class="ohlcv-val ${bpCls}">${(bp * 100).toFixed(1)}%</span></div>`;
+  }
+
+  if (ex.vwap) {
+    html += `<div class="ohlcv-group"><span class="ohlcv-label">VWAP</span><span class="ohlcv-val neutral">${fmtPrice(ex.vwap)}</span></div>`;
+  }
+
+  bar.innerHTML = html;
+
+  document.getElementById('current-price').textContent = fmtPrice(d.close);
+  const ce = document.getElementById('price-change');
+  ce.textContent = `${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`;
+  ce.className = `price-change ${cls}`;
+}
+
+function updateDataPanel(candle) {
+  if (!candle) return;
+  const panel = document.getElementById('data-panel');
+  const ex = candle.extra || {};
+  const o = parseFloat(candle.open), h = parseFloat(candle.high);
+  const l = parseFloat(candle.low), c = parseFloat(candle.close);
+  const up = c >= o;
+  const cls = up ? 'up' : 'down';
+  const bp = ex.buy_pressure;
+  const bpCls = bp > 0.5 ? 'up' : bp < 0.5 ? 'down' : '';
+
+  const rows = [
+    ['Time', candle.time ? new Date(candle.time).toLocaleString() : '--', ''],
+    ['Open', fmtPrice(candle.open), cls],
+    ['High', fmtPrice(candle.high), 'up'],
+    ['Low', fmtPrice(candle.low), 'down'],
+    ['Close', fmtPrice(candle.close), cls],
+    ['Change', `${(c-o) >= 0 ? '+' : ''}${fmtPrice(c-o)} (${o ? ((c-o)/o*100).toFixed(2) : 0}%)`, cls],
+    ['---', '', ''],
+    ['Volume', parseFloat(candle.volume).toFixed(4), ''],
+    ['Quote Volume', ex.quote_volume ? parseFloat(ex.quote_volume).toFixed(2) : '--', ''],
+    ['Trades', ex.num_trades || ex.trades || '--', ''],
+    ['Vol/Trade', ex.volume_per_trade ? parseFloat(ex.volume_per_trade).toFixed(6) : '--', ''],
+    ['---', '', ''],
+    ['Taker Buy Vol', ex.taker_buy_base_volume ? parseFloat(ex.taker_buy_base_volume).toFixed(4) : '--', ''],
+    ['Taker Buy Quote', ex.taker_buy_quote_volume ? parseFloat(ex.taker_buy_quote_volume).toFixed(2) : '--', ''],
+    ['Buy Pressure', bp != null ? (bp * 100).toFixed(1) + '%' : '--', bpCls],
+    ['---', '', ''],
+    ['VWAP', ex.vwap ? fmtPrice(ex.vwap) : '--', ''],
+    ['Body Ratio', ex.body_ratio != null ? (ex.body_ratio * 100).toFixed(1) + '%' : '--', ''],
+    ['Upper Wick', ex.upper_wick_ratio != null ? (ex.upper_wick_ratio * 100).toFixed(1) + '%' : '--', ''],
+    ['Lower Wick', ex.lower_wick_ratio != null ? (ex.lower_wick_ratio * 100).toFixed(1) + '%' : '--', ''],
+  ];
+
+  panel.innerHTML = '<div class="sidebar-title">Candle Details</div>' +
+    rows.map(([label, val, cls]) => {
+      if (label === '---') return '<div style="border-top:1px solid var(--border);margin:2px 16px"></div>';
+      return `<div class="data-row"><span class="label">${label}</span><span class="value ${cls}">${val}</span></div>`;
+    }).join('');
+}
+
+function updateSymbolButtons() {
+  document.querySelectorAll('.symbol-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.symbol === currentSymbol)
+  );
+}
+
+function updateCoinList() {
+  document.getElementById('coin-list').innerHTML = SYMBOLS.map(({ sym, name, short }) => {
+    const data = allData[sym] || [];
+    const active = sym === currentSymbol;
+    let price = '--', pct = 0, pctStr = '--';
+
+    if (data.length) {
+      const lc = parseFloat(data[data.length - 1].close);
+      const fo = parseFloat(data[0].open);
+      price = fmtPrice(lc);
+      pct = (lc - fo) / fo * 100;
+      pctStr = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+    }
+
+    const t = tickerData[sym];
+    if (t) {
+      pct = parseFloat(t.price_change_pct) || pct;
+      pctStr = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+    }
+
+    return `<div class="coin-row ${active ? 'active' : ''}" onclick="selectCoin('${sym}')">
+      <div class="coin-name">${short}<small>${name}</small></div>
+      <div class="coin-price">${price}</div>
+      <div class="coin-change ${pct >= 0 ? 'up' : 'down'}">${pctStr}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectCoin(s) { updateChart(s); }
+
+function renderSymbolBar() {
+  document.getElementById('symbol-bar').innerHTML = SYMBOLS.map(({ sym, short }) =>
+    `<button class="symbol-btn" data-symbol="${sym}" onclick="selectCoin('${sym}')">${short}</button>`
+  ).join('');
+}
+
+async function loadAllData() {
+  const status = document.getElementById('data-status');
+  status.textContent = 'Fetching data...';
+  await fetchTickers();
+
+  let loaded = 0;
+  await Promise.all(SYMBOLS.map(async ({ sym }) => {
+    allData[sym] = await fetchCandles(sym);
+    loaded++;
+    status.textContent = `Loaded ${loaded}/${SYMBOLS.length}`;
+  }));
+
+  const total = Object.values(allData).reduce((s, d) => s + d.length, 0);
+  status.textContent = `${total.toLocaleString()} candles loaded`;
+  updateChart(currentSymbol);
+}
+
+applyTheme(currentTheme);
+renderSymbolBar();
+initChart();
+loadAllData();
+
+// Auto-refresh: fetch latest data every 30 seconds
+setInterval(async () => {
+  const status = document.getElementById('data-status');
+  const prevTotal = Object.values(allData).reduce((s, d) => s + d.length, 0);
+
+  await Promise.all(SYMBOLS.map(async ({ sym }) => {
+    allData[sym] = await fetchCandles(sym);
+  }));
+  await fetchTickers();
+
+  const newTotal = Object.values(allData).reduce((s, d) => s + d.length, 0);
+  const diff = newTotal - prevTotal;
+
+  const now = new Date().toLocaleTimeString();
+  if (diff > 0) {
+    status.textContent = `${newTotal.toLocaleString()} candles | +${diff} new | ${now}`;
+  } else {
+    status.textContent = `${newTotal.toLocaleString()} candles | live | ${now}`;
+  }
+
+  updateChart(currentSymbol);
+}, 30000);
+</script>
+</body>
+</html>
